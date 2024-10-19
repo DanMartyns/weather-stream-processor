@@ -1,3 +1,4 @@
 kafka-python
 requests
+psycopg2-binary
 pyspark
