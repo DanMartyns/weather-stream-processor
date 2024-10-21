@@ -1,7 +1,6 @@
 services:
   zookeeper:
     image: zookeeper:3.7.1
-    container_name: zookeeper_weather_stream_container
     restart: unless-stopped
     ports:
       - "2181:2181"
@@ -15,12 +14,10 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
       ZOOKEEPER_INIT_LIMIT: 5
       ZOOKEEPER_SYNC_LIMIT: 2
-      ZOOKEEPER_SERVERS: "localhost:2888:3888"
-      ZOO_DATA_DIR: /data  # Directory where the Zookeeper will store data
+      ZOOKEEPER_SERVERS: "zookeeper:2888:3888"
 
   kafka:
     image: wurstmeister/kafka:2.12-2.3.0
-    container_name: kafka_weather_stream_container
     ports:
       - "9092:9092"
     environment:
@@ -28,12 +25,16 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CREATE_TOPICS: "weather:1:1"
     depends_on:
       - zookeeper
+    healthcheck:
+      test: ["CMD", "kafka-topics.sh", "--bootstrap-server=localhost:9092", "--list"]
+      start_period: 15s
+      interval: 10s
 
   postgres:
     image: postgres:latest
-    container_name: postgres_weather_stream_container
     restart: always
     environment:
       POSTGRES_DB: weather_db
@@ -46,16 +47,17 @@ services:
 
   spark-master:
     image: bitnami/spark:latest
-    container_name: spark_master_weather_stream_container
+    restart: unless-stopped
     ports:
       - "8080:8080"
+      - "7077:7077"
     environment:
       SPARK_MODE: master
       SPARK_MASTER_HOST: spark-master
 
   spark-worker:
     image: bitnami/spark:latest
-    container_name: spark_worker_weather_stream_container
+    restart: unless-stopped
     environment:
       SPARK_MODE: worker
       SPARK_MASTER_URL: spark://spark-master:7077
@@ -63,40 +65,34 @@ services:
       - spark-master
 
   weather_stream:
-    container_name: weather_stream_container
     build: .
+    restart: unless-stopped
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - KAFKA_TOPIC=weather_data
-      - KAFKA_PRODUCER_KEY_SERIALIZER=org.apache.kafka.common.serialization.ByteArraySerializer
-      - KAFKA_PRODUCER_VALUE_SERIALIZER=org.apache.kafka.common.serialization.ByteArraySerializer
+      - KAFKA_TOPIC=weather
       - KAFKA_PRODUCER_ACKS=all
       - KAFKA_PRODUCER_COMPRESSION_TYPE=gzip
       - KAFKA_PRODUCER_RETRIES=5
-      - KAFKA_PRODUCER_MAX_IN_FLIGHT_REQUESTS=5
       - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
       - LAT=52.084516
       - LON=5.115539
-      - POSTGRES_DB=weather_db
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     depends_on:
       - kafka
 
   weather_processor:
-    container_name: processing_weather_stream_container
     build: .
+    restart: unless-stopped
     depends_on:
       - kafka
       - spark-master
       - spark-worker
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_TOPIC: weather_data
+      KAFKA_TOPIC: weather
+      POSTGRES_DB: weather_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     command: >
       spark-submit
       --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.2.1
       /app/weather_processor.py
-    restart: always
-    links:
-      - kafka
