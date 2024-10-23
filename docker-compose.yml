@@ -1,37 +1,43 @@
+networks:
+  kafka-spark:
+    name: kafka-spark
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/24
+          gateway: 172.18.0.1
+
 services:
   zookeeper:
-    image: zookeeper:3.7.1
+    image: docker.io/bitnami/zookeeper:3.7
+    container_name: weather_zookeeper
     restart: unless-stopped
     ports:
       - "2181:2181"
-      - "2888:2888"
-      - "3888:3888"
     environment:
-      ZOOKEEPER_SERVER_ID: 1
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_PEER_PORT: 2888
-      ZOOKEEPER_LEADER_PORT: 3888
-      ZOOKEEPER_TICK_TIME: 2000
-      ZOOKEEPER_INIT_LIMIT: 5
-      ZOOKEEPER_SYNC_LIMIT: 2
-      ZOOKEEPER_SERVERS: "zookeeper:2888:3888"
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.8
 
   kafka:
-    image: wurstmeister/kafka:2.12-2.3.0
+    image: docker.io/bitnami/kafka:3
+    container_name: weather_kafka
     ports:
       - "9092:9092"
+      - "9094:9094"
     environment:
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_CREATE_TOPICS: "weather:1:1"
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=CLIENT://:9092,EXTERNAL://:9094
+      - KAFKA_CFG_ADVERTISED_LISTENERS=CLIENT://kafka:9092,EXTERNAL://172.18.0.9:9094
+      - KAFKA_INTER_BROKER_LISTENER_NAME=CLIENT
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.9
     depends_on:
       - zookeeper
-    healthcheck:
-      test: ["CMD", "kafka-topics.sh", "--bootstrap-server=localhost:9092", "--list"]
-      start_period: 15s
-      interval: 10s
 
   postgres:
     image: postgres:latest
@@ -42,50 +48,75 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.15
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
   spark-master:
-    image: bitnami/spark:latest
+    image: docker.io/bitnami/spark:3
+    container_name: weather_spark_master
     restart: unless-stopped
     ports:
       - "8080:8080"
-      - "7077:7077"
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.10      
     environment:
       SPARK_MODE: master
       SPARK_MASTER_HOST: spark-master
 
   spark-worker:
-    image: bitnami/spark:latest
+    image: docker.io/bitnami/spark:3
+    container_name: weather_spark_worker_1
     restart: unless-stopped
     environment:
       SPARK_MODE: worker
       SPARK_MASTER_URL: spark://spark-master:7077
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.11
+    depends_on:
+      - spark-master
+
+  spark-worker-2:
+    image: docker.io/bitnami/spark:3
+    container_name: weather_spark_worker_2
+    restart: unless-stopped
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.14
     depends_on:
       - spark-master
 
   weather_stream:
     build: .
+    container_name: weather_stream_producer
     restart: unless-stopped
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - KAFKA_TOPIC=weather
-      - KAFKA_PRODUCER_ACKS=all
-      - KAFKA_PRODUCER_COMPRESSION_TYPE=gzip
-      - KAFKA_PRODUCER_RETRIES=5
       - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
-      - LAT=52.084516
-      - LON=5.115539
+      - LOCATIONS_JSON=[{"lat":52.084516, "lon":5.115539}, {"lat":41.149940, "lon":-8.610250}]
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.12
     depends_on:
       - kafka
 
   weather_processor:
     build: .
+    container_name: weather_processor_consumer
     restart: unless-stopped
     depends_on:
       - kafka
       - spark-master
       - spark-worker
+      - postgres
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC: weather
@@ -96,3 +127,6 @@ services:
       spark-submit
       --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.2.1
       /app/weather_processor.py
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.13
