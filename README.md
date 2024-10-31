@@ -1,6 +1,6 @@
 # Weather Stream Processor
 ## Introduction
-The goal of this project is to demonstrate the design and implementation of a data processing application. The assignment focuses on three core challenges common in data engineering:
+The goal of this project is to demonstrate the design and implementation of an asynchronous weather data processing application. The assignment focuses on three core challenges common in data engineering:
 
 - **Data Access**: Collecting, storing, and exposing data.
 - **Data Transformation**: Building streaming data processing applications.
