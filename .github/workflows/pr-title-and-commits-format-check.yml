@@ -18,10 +18,10 @@ jobs:
       env:
         TITLE: ${{ github.event.pull_request.title }}
       run: |
-        if [[ ! "$TITLE" =~ ^\[(feature|bugfix)\]\ [A-Z].+ ]]; then
+        if [[ ! "$TITLE" =~ ^\[(documentation|feature|bugfix)\]\ [A-Z].+ ]]; then
           echo "❌ Invalid PR Title format!"
           echo "PR title must follow the format '[type] message', where:"
-          echo "  - 'type' is either 'feature' or 'bugfix'."
+          echo "  - 'type' is either 'feature' or 'bugfix' or 'documentation'."
           echo "  - 'message' starts with an uppercase letter."
           exit 1
         else
@@ -46,7 +46,7 @@ jobs:
     - name: Validate Commit Messages Format
       run: |
         # Define the regex pattern
-        pattern='^\[(feature|bugfix)\] [A-Z].*'
+        pattern='^\[(documentation|feature|bugfix)\] [A-Z].*'
 
         # Read commit messages from the file
         while IFS= read -r commit; do
@@ -57,7 +57,7 @@ jobs:
             echo "❌ The following commit message does not follow the required format:"
             echo "$commit_message"
             echo "Each commit message must follow the format '[type]: message', where:"
-            echo "  - 'type' is either 'feature' or 'bugfix'."
+            echo "  - 'type' is either 'feature' or 'bugfix' or 'documentation'."
             echo "  - 'message' starts with an uppercase letter."
             exit 1
           else
@@ -106,6 +106,8 @@ jobs:
           echo "LABEL=feature" >> $GITHUB_ENV
         elif [[ "$pr_title" =~ ^\[bugfix\] ]]; then
           echo "LABEL=bugfix" >> $GITHUB_ENV
+        elif [[ "$pr_title" =~ ^\[documentation\] ]]; then
+          echo "LABEL=documentation" >> $GITHUB_ENV          
         else
           echo "❌ Unable to determine label from PR title."
           exit 1
