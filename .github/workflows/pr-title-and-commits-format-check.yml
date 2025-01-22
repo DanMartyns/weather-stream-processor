@@ -1,0 +1,136 @@
+name: Check PR Title and Commit Messages format
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  check-pr-title-and-commit-messages:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: Checkout the repository
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # Step 2: Validate PR Title Format
+    - name: Validate PR Title Format
+      env:
+        TITLE: ${{ github.event.pull_request.title }}
+      run: |
+        if [[ ! "$TITLE" =~ ^\[(feature|bugfix)\]\ [A-Z].+ ]]; then
+          echo "❌ Invalid PR Title format!"
+          echo "PR title must follow the format '[type] message', where:"
+          echo "  - 'type' is either 'feature' or 'bugfix'."
+          echo "  - 'message' starts with an uppercase letter."
+          exit 1
+        else
+          echo "✅ PR title format is valid."
+        fi
+
+    # Step 3: Fetch the PR commits
+    - name: Fetch pull request commits
+      env: 
+        BASE_REF: ${{ github.base_ref }}
+        HEAD_REF: ${{ github.head_ref }}
+      run: |
+        # Fetch the base and head branches
+        git fetch origin ${{ env.BASE_REF }} ${{ env.HEAD_REF }}
+
+        # Get the list of commits introduced in the PR (excluding merge commits)
+        commits=$(git log origin/${{ env.BASE_REF }}..origin/${{ env.HEAD_REF }} --no-merges --pretty=format:"%h %s")
+
+        echo "$commits" > pr_commits.txt
+
+    # Step 4: Validate Commit Messages Format
+    - name: Validate Commit Messages Format
+      run: |
+        # Define the regex pattern
+        pattern='^\[(feature|bugfix)\] [A-Z].*'
+
+        # Read commit messages from the file
+        while IFS= read -r commit; do
+          # Extract the commit message (everything after the first space)
+          commit_message=$(echo "$commit" | cut -d' ' -f2-)
+
+          if [[ ! "$commit_message" =~ $pattern ]]; then
+            echo "❌ The following commit message does not follow the required format:"
+            echo "$commit_message"
+            echo "Each commit message must follow the format '[type]: message', where:"
+            echo "  - 'type' is either 'feature' or 'bugfix'."
+            echo "  - 'message' starts with an uppercase letter."
+            exit 1
+          else
+            echo "✅ Commit message '$commit_message' is valid."
+          fi
+        done < pr_commits.txt
+
+    # Step 5: Ensure PR has only one commit
+    - name: Check for a single commit in the PR
+      run: |
+        # Get the commits
+        commits=$(cat pr_commits.txt)
+        
+        # Count the number of lines in the $commits variable
+        commit_count=$(echo "$commits" | wc -l)
+
+        if [ "$commit_count" -ne 1 ]; then
+          echo "❌ This PR contains $commit_count commits. Each PR must have exactly one commit."
+          echo "Please squash your commits into a single commit before proceeding."
+          exit 1
+        else
+          echo "✅ This PR has exactly one commit."
+        fi
+
+  publish-tags:
+    runs-on: ubuntu-latest
+    needs: check-pr-title-and-commit-messages
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+    # Step 1: Checkout the repository
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # Step 2: Add label based on PR title
+    - name: Determine Label from PR Title
+      id: LABEL
+      env:
+        TITLE: ${{ github.event.pull_request.title }}      
+      run: |
+        pr_title="${{ env.TITLE }}"
+
+        if [[ "$pr_title" =~ ^\[feature\] ]]; then
+          echo "LABEL=feature" >> $GITHUB_ENV
+        elif [[ "$pr_title" =~ ^\[bugfix\] ]]; then
+          echo "LABEL=bugfix" >> $GITHUB_ENV
+        else
+          echo "❌ Unable to determine label from PR title."
+          exit 1
+        fi
+
+    - name: Apply Label
+      uses: actions/github-script@v7
+      env:
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+      with:
+        script: |
+          const label = process.env.LABEL;  // Access the label set in the previous step
+          const pr_number = process.env.PR_NUMBER;
+          const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+
+          if (label) {
+            await github.rest.issues.addLabels({
+              owner: owner,
+              repo: repo,
+              issue_number: pr_number,
+              labels: [label],
+            });
+            console.log(`✅ Label "${label}" applied to PR #${pr_number}`);
+          } else {
+            console.log(`❌ No label to apply for PR #${pr_number}`);
+          }
+  
