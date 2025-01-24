@@ -76,6 +76,7 @@ async def wait_for_kafka_connection(bootstrap_servers, topic, retries=10, delay=
 
     raise Exception("Failed to connect to Kafka after multiple attempts.")
 
+
 async def read_kafka_data(kafka_df):
     """
     Processes the Kafka data stream with Spark.
@@ -154,15 +155,15 @@ def get_db_connection(retries=5, delay=5):
     """
     Establishes a connection to the PostgreSQL database with retry mechanism.
 
-    This function attempts to connect to the PostgreSQL database specified by the 
-    global connection parameters. If the connection fails, it will retry the specified 
+    This function attempts to connect to the PostgreSQL database specified by the
+    global connection parameters. If the connection fails, it will retry the specified
     number of times with a delay between attempts.
 
     Parameters:
     ----------
     retries : int, optional
         The number of times to retry connecting to the database. Default is 5.
-    
+
     delay : int, optional
         The number of seconds to wait between retries. Default is 5.
 
@@ -185,8 +186,10 @@ def get_db_connection(retries=5, delay=5):
                 password=POSTGRES_PASSWORD,
             )
         except psycopg2.OperationalError as e:
-            log.error(f"PostgreSQL connection error (attempt {attempt + 1}/{retries}): {e}")
-            time.sleep(delay)
+            log.error(
+                f"PostgreSQL connection error (attempt {attempt + 1}/{retries}): {e}"
+            )
+
     raise Exception("Failed to connect to PostgreSQL after multiple attempts.")
 
 
@@ -194,18 +197,18 @@ def store_weather_data(batch_df, batch_id):
     """
     Stores the fetched weather data into the PostgreSQL database from a Spark DataFrame.
 
-    This function takes a batch of weather data, filters out any rows with 
-    missing values for key fields, and inserts the valid data into the 
+    This function takes a batch of weather data, filters out any rows with
+    missing values for key fields, and inserts the valid data into the
     PostgreSQL database. Each insertion is logged for tracking purposes.
 
     Parameters:
     ----------
     batch_df : pyspark.sql.DataFrame
-        A Spark DataFrame containing the weather data to be stored. It should include 
+        A Spark DataFrame containing the weather data to be stored. It should include
         columns for timestamp, latitude, longitude, and hourly precipitation.
-    
+
     batch_id : int
-        The identifier for the batch of data being processed. This is primarily 
+        The identifier for the batch of data being processed. This is primarily
         for logging purposes and can be used to track which batch is being stored.
 
     Returns:
@@ -215,7 +218,7 @@ def store_weather_data(batch_df, batch_id):
     Raises:
     -------
     Exception
-        Raises an exception if there is an error during the database connection 
+        Raises an exception if there is an error during the database connection
         or data insertion process.
     """
     conn = None

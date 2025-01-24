@@ -34,14 +34,14 @@ async def wait_for_kafka_connection(bootstrap_servers, retries=10, delay=2):
     """
     Asynchronously tries to establish a connection to Kafka with a retry mechanism.
 
-    This function attempts to create a Kafka producer connection to the specified 
-    bootstrap servers. It includes a retry mechanism to handle transient connection 
+    This function attempts to create a Kafka producer connection to the specified
+    bootstrap servers. It includes a retry mechanism to handle transient connection
     issues, logging each attempt and its outcome.
 
     Parameters:
     ----------
     bootstrap_servers : str
-        A comma-separated string of Kafka bootstrap server addresses. 
+        A comma-separated string of Kafka bootstrap server addresses.
         Example: "localhost:9092,localhost:9094".
 
     retries : int, optional
@@ -58,20 +58,24 @@ async def wait_for_kafka_connection(bootstrap_servers, retries=10, delay=2):
     Raises:
     -------
     Exception
-        Raises an exception if a connection to Kafka cannot be established 
+        Raises an exception if a connection to Kafka cannot be established
         after the specified number of retries.
     """
     for attempt in range(retries):
         try:
             # Initialize Kafka producer
             producer = KafkaProducer(
-                bootstrap_servers=bootstrap_servers, # Kafka broker addresses
-                key_serializer=lambda k: k.encode("utf-8") if isinstance(k, str) else k, # Serialize function. Converts string keys to UTF-8 encode bytes.
-                value_serializer=lambda v: json.dumps(v).encode("utf-8"), # Serialize function. Converts the value to a JSON string and then encodes it as UTF-8 bytes.
+                bootstrap_servers=bootstrap_servers,  # Kafka broker addresses
+                key_serializer=lambda k: k.encode("utf-8")
+                if isinstance(k, str)
+                else k,  # Serialize function. Converts string keys to UTF-8 encode bytes.
+                value_serializer=lambda v: json.dumps(v).encode(
+                    "utf-8"
+                ),  # Serialize function. Converts the value to a JSON string and then encodes it as UTF-8 bytes.
                 retries=5,  # Sets the number of retry attempts the producer will make if sending a message fails.
-                batch_size=16384, # Defines the maximum size (in bytes) of a batch of messages that the producer will send to Kafka in one request. (16 kB)
-                linger_ms=0, # Specifies the time (in milliseconds) to wait before sending a batch of messages. Setting to 0, messages will be sent immediately without waiting.
-                acks='all', # Defines the number of acknowledgments the producer requires from Kafka before considering a request complete.
+                batch_size=16384,  # Defines the maximum size (in bytes) of a batch of messages that the producer will send to Kafka in one request. (16 kB)
+                linger_ms=0,  # Specifies the time (in milliseconds) to wait before sending a batch of messages. Setting to 0, messages will be sent immediately without waiting.
+                acks="all",  # Defines the number of acknowledgments the producer requires from Kafka before considering a request complete.
                 request_timeout_ms=60000,  # Sets the maximum time (in milliseconds) the producer will wait for a response from Kafka before timing out. (60 sec)
                 metadata_max_age_ms=60000,  # Defines how long (in milliseconds) the producer should cache metadata about the brokers. (60 sec)
             )
@@ -92,8 +96,8 @@ async def fetch_weather_data(producer):
     Fetches weather data from the OpenWeatherMap API for specified locations and sends it to a Kafka topic.
 
     This function iterates over predefined locations, constructs the API request URL for each location,
-    and retrieves weather data asynchronously. It extracts precipitation data from the response, calculates 
-    the total precipitation, and sends this information to the specified Kafka topic. The function also 
+    and retrieves weather data asynchronously. It extracts precipitation data from the response, calculates
+    the total precipitation, and sends this information to the specified Kafka topic. The function also
     logs the status of the sent message and handles potential errors during the fetching and sending process.
 
     Parameters:
@@ -103,7 +107,7 @@ async def fetch_weather_data(producer):
         requests.exceptions.RequestException: If there is an error during the API request.
 
     Notes:
-        - It waits for an acknowledgment from Kafka after sending each message and logs success or failure 
+        - It waits for an acknowledgment from Kafka after sending each message and logs success or failure
           accordingly.
     """
 
